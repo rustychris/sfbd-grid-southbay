@@ -3,50 +3,49 @@ import unstructured_grid
 from delft import dfm_grid
 import utils
 from shapely import geometry
+import plot_utils
 
 ## 
 reload(unstructured_grid)
 reload(dfm_grid)
 g=unstructured_grid.UnTRIM08Grid("SFEI_SSFB_fo.grd")
-#g.make_cell_nodes_from_edge_nodes()
-g.report_orthogonality()
-
-# => 
-#    Mean circumcenter error: 0.00246137
-#    Max circumcenter error: 0.172258
-#  Recalculating edge to cells
-#    Mean angle error: 0.29 deg
-#    Max angle error: 24.32 deg
-
 
 ## 
+if 1:
+    g.report_orthogonality()
 
-circ_errs=g.circum_errors()
-angle_errs=g.angle_errors()
-angle_errs *= 180/np.pi
+    # => 
+    #    Mean circumcenter error: 0.00246137
+    #    Max circumcenter error: 0.172258
+    #  Recalculating edge to cells
+    #    Mean angle error: 0.29 deg
+    #    Max angle error: 24.32 deg
+
+    circ_errs=g.circum_errors()
+    angle_errs=g.angle_errors()
+    angle_errs *= 180/np.pi
+
+    plt.figure(1).clf()
+    fig,(ax1,ax2)=plt.subplots(1,2,sharex=True,sharey=True,num=1)
+
+    nontri=g.cells['nodes'][:,3]>=0
+    coll1=g.plot_cells(values=circ_errs[nontri],mask=nontri,ax=ax1,lw=0)
+    sel=angle_errs
+    coll2=g.plot_edges(values=angle_errs,ax=ax2)
+    coll2.set_clim([0,5])
+    ax1.axis('equal')
+
 ## 
-
-plt.figure(1).clf()
-fig,(ax1,ax2)=plt.subplots(1,2,sharex=True,sharey=True,num=1)
-
-nontri=g.cells['nodes'][:,3]>=0
-coll1=g.plot_cells(values=circ_errs[nontri],mask=nontri,ax=ax1,lw=0)
-sel=angle_errs
-coll2=g.plot_edges(values=angle_errs,ax=ax2)
-coll2.set_clim([0,5])
-ax1.axis('equal')
-
-## 
-
-plt.figure(1).clf()
-coll=g.plot_cells(values=g.cells['depth_mean'],lw=0)
-plt.axis('equal')
+if 1:
+    plt.figure(1).clf()
+    coll=g.plot_cells(values=g.cells['depth_mean'],lw=0)
+    plt.axis('equal')
 
 ## 
 # No useful depth info in the new grid, and the bathy in the rest of the grid has 
 # been lost - bring in depth info from existing sfbd grid, set the new portions as
 # -999
-gsfbd=dfm_grid.DFMGrid(fn="../../cascade2/baydeltamodel/dec1999_mar2000/r14c_net.nc")
+gsfbd=dfm_grid.DFMGrid(fn="../../delft/cascade2/baydeltamodel/dec1999_mar2000/r14c_net.nc")
 # has nodes['depth'], no cell or edge bathy
 
 # Just for plotting:
@@ -119,9 +118,30 @@ ax1.axis('equal')
 
 ## 
 
-# ah, but delta shell does not care for nans.
-g.nodes['depth'][ np.isnan(g.nodes['depth']) ] = -9999
+if 0: # write without any south bay bathy:
+    # ah, but delta shell does not care for nans.
+    g.nodes['depth'][ np.isnan(g.nodes['depth']) ] = -9999
+    dfm_grid.write_dfm(g,"SFEI_SSFB_fo_net.nc",overwrite=True)
 
 ## 
 
-dfm_grid.write_dfm(g,"SFEI_SSFB_fo_net.nc",overwrite=True)
+import field
+dem=field.MultiRasterField(['/home/rusty/data/bathy_dwr/gtiff/*.gtiff'])
+missing=np.isnan(g.nodes['depth'])
+
+# This is probably in cm!
+bathy_missing=dem( g.nodes['x'][missing] )
+
+g.nodes['depth'][missing]=0.01*bathy_missing
+
+## 
+plt.figure(1).clf() 
+colle=g.plot_edges(lw=0.2,color='k')
+coll=g.plot_nodes(values=g.nodes['depth'])
+coll.set_lw(0)
+plot_utils.cbar(coll)
+plt.axis('equal')
+
+## 
+
+dfm_grid.write_dfm(g,"SFEI_SSFB_fo_dwrbathy_net.nc",overwrite=True)
